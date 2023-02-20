@@ -15,14 +15,6 @@ namespace ldetour {
         return (float)rand() / (float)RAND_MAX;
     }
 
-    static int32_t vformat(float v) {
-        return (int32_t)(v * 100);
-    }
-
-    static float pformat(int32_t v) {
-        return float(v) / 100;
-    }
-
     // 把cur向前移动n, 若成功返回移动前的指针，否则返回NULL
     static void* offset_n(unsigned char*& cur, size_t& sz, size_t n) {
         if (sz < n) {
@@ -90,9 +82,9 @@ namespace ldetour {
         return nvmesh->getMaxTiles();
     }
 
-    nav_query* nav_mesh::create_query(const int max_nodes) {
+    nav_query* nav_mesh::create_query(const int max_nodes, float scale) {
         nav_query* query = new nav_query;
-        if(!dtStatusSucceed(query->create(nvmesh, max_nodes))) {
+        if(!dtStatusSucceed(query->create(nvmesh, max_nodes, scale))) {
             delete query;
             return nullptr;
         }
@@ -114,7 +106,12 @@ namespace ldetour {
         }
     }
 
-    int nav_query::create(dtNavMesh* mesh, const int max_nodes) {
+    int32_t nav_query::pformat(float v) {
+        return (int32_t)(v * qscale);
+    }
+
+    int nav_query::create(dtNavMesh* mesh, const int max_nodes, float scale ) {
+        qscale = scale;
         filter = dtQueryFilter();
         nvquery = dtAllocNavMeshQuery();
         if (!nvquery) {
@@ -137,13 +134,38 @@ namespace ldetour {
         return DT_SUCCESS;
     }
 
+    int nav_query::raycast(lua_State* L, int32_t sx, int32_t sy, int32_t sz, int32_t ex, int32_t ey, int32_t ez) {
+        float extents[3] = { 2, 4, 2 };    // 沿着每个轴的搜索长度
+        float end_pos[3] = { ex / qscale, ey / qscale, ez / qscale };
+        float start_pos[3] = { sx / qscale, sy / qscale, sz / qscale };
 
-    int nav_query::find_straight_path(lua_State* L, int32_t sx, int32_t sy, int32_t sz, int32_t ex, int32_t ey, int32_t ez) {
-        dtPolyRef start_ref, end_ref; // 起点/终点所在的多边形
-        float half_extents[3] = { 2, 4, 2 }; // 沿着每个轴的搜索长度
+        nav_point nearestPt;
+        dtPolyRef start_ref;  // 起点所在的多边形
+		filter.setExcludeFlags(0);
+        filter.setIncludeFlags(0xffff);
+		nvquery->findNearestPoly(start_pos, extents, &filter, &start_ref, nearestPt);
+        if (!start_ref) {
+            return luakit::variadic_return(L, false);
+        }
+        float t = 0;
+        int npolys = 0;
+        nav_point hit_normal, hit_point;
+        nvquery->raycast(start_ref, start_pos, end_pos, &filter, &t, hit_normal, polys, &npolys, max_polys);
+        if (t > 1) {
+            return luakit::variadic_return(L, true);
+        }
+        hit_point[0] = start_pos[0] + (end_pos[0] - start_pos[0]) * t;
+        hit_point[1] = start_pos[1] + (end_pos[1] - start_pos[1]) * t;
+        hit_point[2] = start_pos[2] + (end_pos[2] - start_pos[2]) * t;
+        return luakit::variadic_return(L, true, pformat(hit_point[0]), pformat(hit_point[1]), pformat(hit_point[2]));
+    }
 
-        float end_pos[3] = { pformat(ex), pformat(ey), pformat(ez) };
-        float start_pos[3] = { pformat(sx), pformat(sy), pformat(sz) };
+    int nav_query::find_path(lua_State* L, int32_t sx, int32_t sy, int32_t sz, int32_t ex, int32_t ey, int32_t ez) {
+        dtPolyRef start_ref, end_ref;           // 起点/终点所在的多边形
+        float half_extents[3] = { 2, 4, 2 };    // 沿着每个轴的搜索长度
+
+        float end_pos[3] = { ex / qscale, ey / qscale, ez / qscale };
+        float start_pos[3] = { sx / qscale, sy / qscale, sz / qscale };
         nvquery->findNearestPoly(start_pos, half_extents, &filter, &start_ref, 0);
         nvquery->findNearestPoly(end_pos, half_extents, &filter, &end_ref, 0);
         if (!start_ref || !end_ref) {
@@ -164,14 +186,14 @@ namespace ldetour {
         }
         std::vector<int32_t> path(path_count * 3);
         for (int i = 0; i < path_count; ++i) {
-            path[i * 3] = vformat(points[i][0]);
-            path[i * 3 + 1] = vformat(points[i][1]);
-            path[i * 3 + 2] = vformat(points[i][2]);
+            path[i * 3] = pformat(points[i][0]);
+            path[i * 3 + 1] = pformat(points[i][1]);
+            path[i * 3 + 2] = pformat(points[i][2]);
         }
         return luakit::variadic_return(L, path_count, std::move(path));
     }
 
-    int nav_query::find_random_point(lua_State* L) {
+    int nav_query::random_point(lua_State* L) {
         // filter.setAreaCost(SAMPLE_POLYAREA_GROUND, 1.0f);
         // filter.setAreaCost(SAMPLE_POLYAREA_WATER, 10.0f);
         // filter.setAreaCost(SAMPLE_POLYAREA_ROAD, 1.0f);
@@ -184,7 +206,7 @@ namespace ldetour {
         nvquery->findRandomPoint(&filter, frand, &ref, pos);
 
         //luakit::kit_state state(L);
-        return luakit::variadic_return(L, vformat(pos[0]), vformat(pos[1]), vformat(pos[2]));
+        return luakit::variadic_return(L, pformat(pos[0]), pformat(pos[1]), pformat(pos[2]));
     }
 
 }

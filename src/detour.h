@@ -47,17 +47,26 @@ namespace ldetour {
     public:
         ~nav_query();
 
-        int create(dtNavMesh* mesh, const int max_nodes);
+        int create(dtNavMesh* mesh, const int max_nodes, float scaled);
     
         // 返回导航图上的随机一个点
         // [out]   pos         The random location.
-        int find_random_point(lua_State* L);
+        int random_point(lua_State* L);
 
         // 查找两点间的路径，如果不可达，则返回最接近终点的路径。
         // [in]    startPos    Path start position. [(x, y, z)]
         // [in]    endPos      Path end position. [(x, y, z)]
         // [out]   path        Points describing the straight path. [(x, y, z) * pathCount].
-        int find_straight_path(lua_State* L, int32_t sx, int32_t sy, int32_t sz, int32_t ex, int32_t ey, int32_t ez);
+        int find_path(lua_State* L, int32_t sx, int32_t sy, int32_t sz, int32_t ex, int32_t ey, int32_t ez);
+        
+        // 射线检查
+        // [in]    startPos    Path start position. [(x, y, z)]
+        // [in]    endPos      Path end position. [(x, y, z)]
+        // [out]   pos         Intersecting point. [(x, y, z)].
+        int raycast(lua_State* L, int32_t sx, int32_t sy, int32_t sz, int32_t ex, int32_t ey, int32_t ez);
+
+    private:
+        int32_t pformat(float v);
 
     private:
         int max_polys;          // polys的长度
@@ -66,6 +75,7 @@ namespace ldetour {
         nav_point* points;      // 寻路过程中的路点缓存
         dtQueryFilter filter;
         dtNavMeshQuery* nvquery;
+        float qscale = 1.0f; 
     };
 
     class nav_mesh
@@ -77,7 +87,7 @@ namespace ldetour {
 
         int create(const char* buf, size_t sz);
 
-        nav_query* create_query(const int max_nodes);
+        nav_query* create_query(const int max_nodes, float scale);
 
     private:
         dtNavMesh* nvmesh = nullptr;

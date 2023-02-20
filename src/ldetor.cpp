@@ -16,8 +16,9 @@ namespace ldetour {
     luakit::lua_table open_ldetour(lua_State* L) {
         luakit::kit_state kit_state(L);
         kit_state.new_class<nav_query>(
-            "find_random_point", &nav_query::find_random_point,
-            "find_straight_path", &nav_query::find_straight_path
+            "raycast", &nav_query::raycast,
+            "find_path", &nav_query::find_path,
+            "random_point", &nav_query::random_point
             );
         kit_state.new_class<nav_mesh>(
             "create_query", &nav_mesh::create_query,
